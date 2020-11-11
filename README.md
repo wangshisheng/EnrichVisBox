@@ -3,7 +3,7 @@
 #### A web toolbox for visualizing functional enrichment results
 
 ## 1. Brief Description
-**<font size='5'> EnrichVisBox </font>** is a free, user-friendly and powerful software for visualization of the functional enrichment analysis results, including bubble plot, UpSet plot, polar bar plot, rectangle plot, ridgeline plot, network plot, and variant chord plot. It is developed with [R](https://www.r-project.org/) and an example is shown here: [https://www.omicsolution.org/wukong/EnrichVisBox/](https://www.omicsolution.org/wukong/EnrichVisBox/).
+**<font size='5'> EnrichVisBox </font>** is a free, user-friendly and powerful software for visualization of the functional enrichment analysis results, including bubble plot, UpSet plot, polar bar plot, rectangle plot, ridgeline plot, network plot, and variant chord plot. It is developed with [R](https://www.r-project.org/) and an example is shown here: [https://www.omicsolution.org/wukong/EnrichVisBox/](https://www.omicsolution.com/wukong/EnrichVisBox/).
 
 ## 2. Detailed Introduction
 The usage about this tool can be found here:
