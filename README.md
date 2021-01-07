@@ -26,10 +26,10 @@ runApp(".../EnrichVisBox/SourceCodes")
 <img src="Figure_example.png" align="center" height="700" width="800"/>
 
 ## 5. Other References
-4.1 Wickham H. [ggplot2](https://ggplot2.tidyverse.org): elegant graphics for data analysis.
+5.1 Wickham H. [ggplot2](https://ggplot2.tidyverse.org): elegant graphics for data analysis.
 
-4.2 Yu G, Wang L, Han Y and He Q. [clusterProfiler](https://yulab-smu.github.io/clusterProfiler-book): an R package for comparing biological themes among gene clusters. OMICS: A Journal of Integrative Biology. 2012, 16(5):284-287.
+5.2 Yu G, Wang L, Han Y and He Q. [clusterProfiler](https://yulab-smu.github.io/clusterProfiler-book): an R package for comparing biological themes among gene clusters. OMICS: A Journal of Integrative Biology. 2012, 16(5):284-287.
 
-4.3 Conway JR, Lex A, Gehlenborg N. [UpSetR](https://doi.org/10.1093/bioinformatics/btx364): an R package for the visualization of intersecting sets and their properties. Bioinformatics. 2017;33(18):2938-2940.
+5.3 Conway JR, Lex A, Gehlenborg N. [UpSetR](https://doi.org/10.1093/bioinformatics/btx364): an R package for the visualization of intersecting sets and their properties. Bioinformatics. 2017;33(18):2938-2940.
 
-4.4 Gu Z, Gu L, Eils R, Schlesner M, Brors B. [circlize](https://academic.oup.com/bioinformatics/article/30/19/2811/2422259) implements and enhances circular visualization in R. Bioinformatics. 2014;30(19):2811-2812.
+5.4 Gu Z, Gu L, Eils R, Schlesner M, Brors B. [circlize](https://academic.oup.com/bioinformatics/article/30/19/2811/2422259) implements and enhances circular visualization in R. Bioinformatics. 2014;30(19):2811-2812.
