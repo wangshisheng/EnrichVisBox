@@ -1,13 +1,24 @@
-pacman::p_load(shiny,shinyjs,shinyBS,ggsci,DT)
+#load packages. If you install this tool locally, please Make sure that all of the following packages are installed.
+library(shiny)
+library(shinyjs)
+library(shinyBS)
+library(openxlsx)
+library(gdata)
+library(ggsci)
+library(DT)
+library(UpSetR)
+library(glue)
+library(ggplot2)
+library(DOSE)
+library(reshape2)
+library(ggridges)
+library(ComplexHeatmap)
+library(clusterProfiler)
+library(enrichplot)
+library(circlize)
 source("plotcodes.R")
-#library(KSEAapp)
-colpalettes<-unique(c(pal_npg("nrc")(10),pal_aaas("default")(10),pal_nejm("default")(8),pal_lancet("lanonc")(9),
-                      pal_jama("default")(7),pal_jco("default")(10),pal_ucscgb("default")(26),pal_d3("category10")(10),
-                      pal_locuszoom("default")(7),pal_igv("default")(51),
-                      pal_uchicago("default")(9),pal_startrek("uniform")(7),
-                      pal_tron("legacy")(7),pal_futurama("planetexpress")(12),pal_rickandmorty("schwifty")(12),
-                      pal_simpsons("springfield")(16),pal_gsea("default")(12)))
-#
+colpalettes<-unique(c(pal_npg("nrc")(10),pal_aaas("default")(10)))
+#ui
 ui<-renderUI(
   fluidPage(
     title="EnrichVisBox",
@@ -142,15 +153,16 @@ ui<-renderUI(
                    ")
       )
     ),
-
     conditionalPanel(condition="$('html').hasClass('shiny-busy')",
                      tags$div(h2(strong("Calculating......")),img(src="rmd_loader.gif"),id="loadmessage")),
     tabsetPanel(
+      #"Welcome" panel
       tabPanel(
         "Welcome",
         uiOutput("welcomeui"),
         icon = icon("home")
       ),
+      #"Import Data" panel
       tabPanel(
         "Import Data",
         sidebarLayout(
@@ -169,12 +181,12 @@ ui<-renderUI(
             ),
             radioButtons(
               "metabopathfileType_Input",
-              label = h4("File format："),
+              label = h4("File format:"),
               choices = list(".xlsx" = 1,".xls"=2, ".csv/txt" = 3),
               selected = 1,
               inline = TRUE
             ),
-            fileInput('metabopathfile1', '1. Import Enrichment Results Data：',
+            fileInput('metabopathfile1', '1. Import Enrichment Results Data:',
                       accept=c('text/csv','text/plain','.xlsx','.xls')),
             checkboxInput('metabopathheader', 'First row as column names ?', TRUE),
             checkboxInput('metabopathfirstcol', 'First column as row names ?', FALSE),
@@ -183,7 +195,7 @@ ui<-renderUI(
             conditionalPanel(condition = "input.metabopathfileType_Input==2",
                              numericInput("metabopathxlsxindex",h5("Sheet index:"),value = 1)),
             conditionalPanel(condition = "input.metabopathfileType_Input==3",
-                             radioButtons('metabopathsep', 'Separator：',
+                             radioButtons('metabopathsep', 'Separator:',
                                           c(Comma=',',
                                             Semicolon=';',
                                             Tab='\t',
@@ -192,12 +204,12 @@ ui<-renderUI(
             tags$hr(style="border-color: grey;"),
             radioButtons(
               "mfunctionalinkyibanfileType_Input_fenzu",
-              label = h4("File format："),
+              label = h4("File format:"),
               choices = list(".xlsx" = 1,".xls"=2, ".csv/txt" = 3),
               selected = 1,
               inline = TRUE
             ),
-            fileInput('mfunctionalinkyibanfile1_fenzu', '2. Import Expression Data：',
+            fileInput('mfunctionalinkyibanfile1_fenzu', '2. Import Expression Data:',
                       accept=c('text/csv','text/plain','.xlsx','.xls')),
             checkboxInput('mfunctionalinkyibanheader_fenzu', 'First row as column names ?', TRUE),
             checkboxInput('mfunctionalinkyibanfirstcol_fenzu', 'First column as row names ?', TRUE),
@@ -206,7 +218,7 @@ ui<-renderUI(
             conditionalPanel(condition = "input.mfunctionalinkyibanfileType_Input_fenzu==2",
                              numericInput("mfunctionalinkyibanxlsxindex_fenzu",h5("Sheet index:"),value = 1)),
             conditionalPanel(condition = "input.mfunctionalinkyibanfileType_Input_fenzu==3",
-                             radioButtons('mfunctionalinkyibansep_fenzu', 'Separator：',
+                             radioButtons('mfunctionalinkyibansep_fenzu', 'Separator:',
                                           c(Comma=',',
                                             Semicolon=';',
                                             Tab='\t',
@@ -215,20 +227,32 @@ ui<-renderUI(
             tags$hr(style="border-color: grey;"),
             textInput("groupinfo","3. Group information:",value = "2;3-3"),
             bsTooltip("groupinfo",'The group information of the expression data. For example, the example data has two group samples with three replicates in each group, so users should type in "2;3-3" here.',
-                      placement = "right",options = list(container = "body"))
+                      placement = "right",options = list(container = "body")),
+            checkboxInput("calfcif",strong("4. Calculate Fold Change for the expression data or not?"),TRUE),
+            conditionalPanel(
+              condition = "input.calfcif==true",
+              div(id="logtansformedif_div",checkboxInput("logtansformedif","4.1 The expression data is log-transformed or not?",TRUE)),
+              bsTooltip("logtansformedif_div",'This parameter is used for calculating Fold Change of each object in the expression data. For example, there are two groups (Group A and Group B) in the expression data. If the expression data is log-transformed, Fold Change = mean(Group B) - mean(Group A). Otherwise, Fold Change = log2(mean(Group B) / mean(Group A)).',
+                        placement = "right",options = list(container = "body"))
+            )
           ),
           mainPanel(
             width = 9,
             hr(),
-            h4("1. Enrichment Result Data："),
+            h4("1. Enrichment Result Data:"),
+            selectInput("enrichsortby","1.1. Sort by:",choices = c("Count","p.adjust","None")),
+            bsTooltip("enrichsortby",'If selecting "Count", it means that the uploaded enrichment result data will be ordered by the Count (from large to small). "p.adjust" means that the data will be ordered by the p.adjust (from small to large). "None" means no sorting for the uploaded enrichment result data.',
+                      placement = "right",options = list(container = "body")),
+            uiOutput("inputenrichwarningui"),
             dataTableOutput("enrichdata"),
             tags$hr(style="border-color: grey;"),
-            h4("2. Expression Data："),
+            h4("2. Expression Data:"),
             dataTableOutput("expressdata")
           )
         ),
         icon = icon("upload")
       ),
+      #"Preview" panel, show dot plot, upSet plot.
       tabPanel(
         "Preview",
         sidebarLayout(
@@ -246,7 +270,7 @@ ui<-renderUI(
               )
             ),
             textInput('precolor', h5('1. Color for dot plot:'), "#4B0082;#CD5C5C"),
-            bsTooltip("precolor",'To change bubble colour. Users can type in two colour names with a semicolon. The first one is for the lowest p.adjust, and the second one is for the highest p.adjust.',
+            bsTooltip("precolor",'To change bubble color. Users can type in two color names with a semicolon. One color name can be a common English name (e.g. red, blue, yellow etc.), or a hex triplet (e.g. #FF0000, #0000FF, #FFFF00 etc.). The first one is for the lowest p.adjust, and the second one is for the highest p.adjust.',
                       placement = "right",options = list(container = "body")),
             textInput('preindex', h5('2. Index:'), "1-10"),
             bsTooltip("preindex",'Which terms or objects will be plotted. The default ‘1-10’ means the top 10 (1 to 10) terms or objects are shown. If users type in ’10-21’, it means it shows the 10th to 21st terms or objects (total of 12 terms or objects). If users input ‘1,10,21’, this means it will show the 1st, the 10th, and the 21st terms or objects (total three terms or objects).',
@@ -258,7 +282,7 @@ ui<-renderUI(
             bsTooltip("showidif",'The label in the dot plot is shown with IDs or Terms, the default is with IDs.',
                       placement = "right",options = list(container = "body")),
             textInput('precolorupset', h5('5. Color for upset plot:'), "#4B0082;#CD5C5C;#E64B35FF"),
-            bsTooltip("precolorupset",' To change colours in the upset plot. Users can type in three colour names with two semicolons. The first one is the colour of the set size bar plot, the second one is the colour of the intersection points, and the third one is the colour of the main bar plot.',
+            bsTooltip("precolorupset",' To change colors in the upset plot. Users can type in three color names with two semicolons. One color name can be a common English name (e.g. red, blue, yellow etc.), or a hex triplet (e.g. #FF0000, #0000FF, #FFFF00 etc.). The first one is the color of the set size bar plot, the second one is the color of the intersection points, and the third one is the color of the main bar plot.',
                       placement = "right",options = list(container = "body")),
             tags$hr(style="border-color: grey;"),
             numericInput("preheight","Height for figure:",value = 800),
@@ -279,6 +303,7 @@ ui<-renderUI(
             conditionalPanel(
               condition = "input.previewxuanze==1",
               downloadButton("dotplottermdl","Download"),
+              uiOutput("warningui1"),
               plotOutput("dotplotterm")
             ),
             conditionalPanel(
@@ -299,6 +324,7 @@ ui<-renderUI(
         ),
         icon = icon("binoculars")
       ),
+      #"Polar Plot" panel
       tabPanel(
         "Polar Plot",
         sidebarLayout(
@@ -316,26 +342,34 @@ ui<-renderUI(
               )
             ),
             checkboxInput("leibieif","1. Contain 'Category' column or not？",TRUE),
-            bsTooltip("leibieif",'If there is this "Category" column in the enrichment analysis resulting data, users should select this parameter and input colour names in the Color for category parameter. Otherwise, unselect this parameter. The number should be same, which means there are three categories, so there should be three colours here.',
+            bsTooltip("leibieif",'If there is this "Category" column in the enrichment analysis resulting data, users should select this parameter and input color names in the Color for category parameter. Otherwise, unselect this parameter. The number should be same, which means there are three categories, so there should be three colors here.',
                       placement = "right",options = list(container = "body")),
             conditionalPanel(
               condition = "input.leibieif==true",
-              textInput("leibiecol",h5("Color for Category："),value="orange;purple;green")
+              textInput("leibietype",h5("1.1. Category name:"),value="BP;MF;CC"),
+              bsTooltip("leibietype",'Please type in the category name (e.g. BP, MF, CC), linked with a semicolon. If users type in one name here, for example, BP, this plot will only show a figure for BP. If users type in two names here, for example, BP;MF, this plot will show these two together.',
+                        placement = "right",options = list(container = "body")),
+              textInput("leibiecol",h5("1.2. Color for Category:"),value="orange;purple;green"),
+              bsTooltip("leibiecol",'Please type in the color for category, linked with a semicolon. The number of colors should be equal to the number of categories that users type in above.',
+                        placement = "right",options = list(container = "body"))
             ),
             textInput('polarindex', h5('2. Index:'), "10;10;10"),
             bsTooltip("polarindex",'Which terms will be plotted. If users select the "Contain Category column or not" parameter, the index number should be the same as the category number and linked with semicolons. For instance, there are three categories in the example data, and, to show top 10 (1 to 10) terms in each category, "10;10;10" is input here. If users unselect the "Contain Category column or not" parameter, the number here will sum up, which means the plot will show the top 30 ("10;10;10" is typed in here) terms in all the data.',
                       placement = "right",options = list(container = "body")),
             textInput('barcolor', h5('3. Color for polar bar plot:'), "#4B0082;#CD5C5C"),
-            bsTooltip("barcolor",'To change the bar colour. Users can type in two colour names with a semicolon. The first one is for lowest p.adjust, and the second one is for highest p.adjust.',
+            bsTooltip("barcolor",'To change the bar color. Users can type in two color names with a semicolon. One color name can be a common English name (e.g. red, blue, yellow etc.), or a hex triplet (e.g. #FF0000, #0000FF, #FFFF00 etc.). The first one is for lowest p.adjust, and the second one is for highest p.adjust.',
                       placement = "right",options = list(container = "body")),
-            numericInput("labelyuanjin",h5("4. Outer label position："),min=0,max=10,value=1.5,step=0.5),
+            numericInput("labelyuanjin",h5("4. Outer label position:"),min=0,max=10,value=1.5,step=0.5),
             bsTooltip("labelyuanjin",'To change the position of outer labels.',
                       placement = "right",options = list(container = "body")),
-            numericInput("labeljiaodu",h5("5. Outer label angle："),value=45,step=1),
+            numericInput("labeljiaodu",h5("5. Outer label angle:"),value=45,step=1),
             bsTooltip("labeljiaodu",'To change the angle of outer labels.',
                       placement = "right",options = list(container = "body")),
             numericInput("lablesize",h5("6. Outer label size"),value=3,step=0.5),
             bsTooltip("lablesize",'To change the size of outer labels.',
+                      placement = "right",options = list(container = "body")),
+            checkboxInput('polarshowidif', '7. ID as label or not ?', TRUE),
+            bsTooltip("polarshowidif",'If selected, the IDs will be shown; otherwise, the terms will be shown.',
                       placement = "right",options = list(container = "body")),
             tags$hr(style="border-color: grey;"),
             numericInput("preheight2","Height for figure:",value = 800),
@@ -352,6 +386,7 @@ ui<-renderUI(
         ),
         icon = icon("sun")
       ),
+      #"Network Plot" panel
       tabPanel(
         "Network Plot",
         sidebarLayout(
@@ -369,10 +404,10 @@ ui<-renderUI(
               )
             ),
             textInput('netdotcolor', h5('1. Color for objects:'), "#4B0082;#B3B3B3;#CD5C5C"),
-            bsTooltip("netdotcolor",'To change point (object) colour. Users can type in two or three colour names with a/two semicolon(s). The first one is for the lowest fold change value (log2 here), and the last one is for the highest fold change value (log2 here).',
+            bsTooltip("netdotcolor",'To change point (object) color. Users can type in two or three color names with a/two semicolon(s). The first one is for the lowest fold change value (log2 here), and the last one is for the highest fold change value (log2 here).',
                       placement = "right",options = list(container = "body")),
             textInput('nettermcolor', h5('2. Color for terms:'), "brown"),
-            bsTooltip("nettermcolor",'To change point (ID/term) colour.',
+            bsTooltip("nettermcolor",'To change point (ID/term) color.',
                       placement = "right",options = list(container = "body")),
             textInput('netindex', h5('3. Index:'), "1-10"),
             bsTooltip("netindex",'Which terms or objects will be plotted. The default "1-10" means the top 10 (1 to 10) terms or objects are shown. If users type in "10-21", it means it shows the 10th to 21st terms or objects (total of 12 terms or objects). If users input "1,10,21", this means it will show the 1st, 10th, and 21st terms or objects (total of three terms or objects).',
@@ -381,7 +416,7 @@ ui<-renderUI(
             bsTooltip("netshowidif",'If selected, the IDs will be shown; otherwise, the terms will be shown.',
                       placement = "right",options = list(container = "body")),
             checkboxInput('colorEdgeif', '5. Edge with color or not ?', TRUE),
-            bsTooltip("colorEdgeif",'If selected, users should type in the same number of colours in the Edge colors parameter. For example, if "1-10" is input in the index parameter, here one should type in 10 colour names for each ID/term. If it is not selected, the line colours will become grey.',
+            bsTooltip("colorEdgeif",'If selected, users should type in the same number of colors in the Edge colors parameter. For example, if "1-10" is input in the index parameter, here one should type in 10 color names for each ID/term. If it is not selected, the line colors will become grey.',
                       placement = "right",options = list(container = "body")),
             conditionalPanel(
               condition = 'input.colorEdgeif==true',
@@ -412,6 +447,7 @@ ui<-renderUI(
         ),
         icon = icon("project-diagram")
       ),
+      #"Heatmap" panel
       tabPanel(
         "Heatmap",
         sidebarLayout(
@@ -423,13 +459,13 @@ ui<-renderUI(
                 id = 'span5',
                 `data-toggle` = "tooltip5",
                 title = '
-                This module shows a heatmap-like plot. There is a coloured rectangle if one object is mapped in one ID/term, and the colour corresponds to the fold change (log2 here); otherwise, there is nothing in the position.
+                This module shows a heatmap-like plot. There is a colored rectangle if one object is mapped in one ID/term, and the color corresponds to the fold change (log2 here); otherwise, there is nothing in the position.
                 ',
                 tags$span(class = "glyphicon glyphicon-question-sign")
               )
             ),
             textInput('heatmapcolor', h5('1. Color:'), "#4B0082;#CD5C5C"),
-            bsTooltip("heatmapcolor",'To change rectangles colour. Users can type in two colour names with a semicolon. The first one is for the lowest fold change value (log2 here), and the second one is for the highest fold change value (log2 here).',
+            bsTooltip("heatmapcolor",'To change rectangles color. Users can type in two color names with a semicolon. The first one is for the lowest fold change value (log2 here), and the second one is for the highest fold change value (log2 here).',
                       placement = "right",options = list(container = "body")),
             textInput('heatmapindex', h5('2. Index:'), "1-10"),
             bsTooltip("heatmapindex",'Which terms or objects will be plotted. The default "1-10" means the top 10 (1 to 10) terms or objects are shown. If users type in "10-21", it means it shows the 10th to 21st terms or objects (total of 12 terms or objects). If users input "1,10,21", this means it will show the 1st, 10th, and 21st terms or objects (total of three terms or objects).',
@@ -452,6 +488,7 @@ ui<-renderUI(
         ),
         icon = icon("map")
       ),
+      #"Ridgeline" panel
       tabPanel(
         "Ridgeline",
         sidebarLayout(
@@ -463,19 +500,22 @@ ui<-renderUI(
                 id = 'span6',
                 `data-toggle` = "tooltip6",
                 title = '
-                In this part, users can show the density distribution of all object fold changes (log2 here) across each ID/term, and colour corresponds to adjusted p values.
+                In this part, users can show the density distribution of all object fold changes (log2 here) across each ID/term, and color corresponds to adjusted p values.
                 ',
                 tags$span(class = "glyphicon glyphicon-question-sign")
               )
             ),
             textInput('ridgelinecolor', h5('1. Color:'), "#4B0082;#CD5C5C"),
-            bsTooltip("ridgelinecolor",'To change the ridgeline colour. Users can type in two colour names with a semicolon. The first one is for the lowest adjusted p value, and the second one is for the highest adjusted p value.',
+            bsTooltip("ridgelinecolor",'To change the ridgeline color. Users can type in two color names with a semicolon. The first one is for the lowest adjusted p value, and the second one is for the highest adjusted p value.',
                       placement = "right",options = list(container = "body")),
             textInput('ridgelineindex', h5('2. Index:'), "1-10"),
             bsTooltip("ridgelineindex",'Which terms or objects will be plotted. The default "1-10" means the top 10 (1 to 10) terms or objects are shown. If users type in "10-21", it means it shows the 10th to 21st terms or objects (total of 12 terms or objects). If users input "1,10,21", this means it will show the 1st, the 10th, and the 21st terms or objects (total of three terms or objects).',
                       placement = "right",options = list(container = "body")),
             checkboxInput('ridgelineshowidif', '3. ID as label or not ?', TRUE),
             bsTooltip("ridgelineshowidif",'If selected, the IDs will be shown; otherwise, the terms will be shown.',
+                      placement = "right",options = list(container = "body")),
+            selectInput('ridgelinestat', h5('4. Shown as density or bin ?'), choices = c("density","bin")),
+            bsTooltip("ridgelinestat",'"density" means the distributions are shown as densities; "bin" means the distributions are shown as bins.',
                       placement = "right",options = list(container = "body")),
             tags$hr(style="border-color: grey;"),
             numericInput("preheight5","Height for figure:",value = 800),
@@ -492,18 +532,19 @@ ui<-renderUI(
         ),
         icon = icon("chart-area")
       ),
+      #"Variant chord plot" panel
       tabPanel(
-        "Objects-Terms Link",
+        "Variant chord plot",
         sidebarLayout(
           sidebarPanel(
             width = 3,
             h3(
-              "Objects-Terms Link",
+              "Variant chord plot",
               tags$span(
                 id = 'span7',
                 `data-toggle` = "tooltip7",
                 title = '
-                This is a kind of variant chord plot that can show the enrichment result data and the expression data together. The left part is the intensity heatmap of proteins in every sample, and the right part is a bar plot of each ID/term; the two parts are linked via coloured lines (green means up-regulated, brown means down-regulated, and colours can be adjusted in the corresponding parameter).
+                This plot can show the "Objects-Terms Link", which means it can present the enrichment result data and the expression data together. The left part is the intensity heatmap of proteins in every sample, and the right part is a bar plot of each ID/term; the two parts are linked via colored lines (green means up-regulated, brown means down-regulated, and colors can be adjusted in the corresponding parameter).
                 ',
                 tags$span(class = "glyphicon glyphicon-question-sign")
               )
@@ -511,57 +552,57 @@ ui<-renderUI(
             textInput('linkpindex', h5('1. Number of category:'), "10;10;10"),
             bsTooltip("linkpindex",'Which terms will be plotted. The index number should be same as the category number and linked with semicolons. For instance, there are three categories in the example data, and, to show the top 10 (1 to 10) terms in each category, one inputs "10;10;10" here.',
                       placement = "right",options = list(container = "body")),
-            numericInput("objectnum",h5("2. Number of Objects："),value = 50,min = 1),
+            numericInput("objectnum",h5("2. Number of Objects:"),value = 50,min = 1),
             bsTooltip("objectnum",'How many objects in the expression data users want to show. For instance, if the user types in "50" here, it means the first 50 proteins in the expression data will be placed on the plot.',
                       placement = "right",options = list(container = "body")),
             checkboxInput('linkpshowidif', '3. ID as label or not ?', TRUE),
             bsTooltip("linkpshowidif",'If selected, the IDs will be shown; otherwise, the terms will be shown.',
                       placement = "right",options = list(container = "body")),
-            textInput("retucol",h5("4. Color for heatmap："),value = "#4B0082;#B3B3B3;#CD5C5C"),
-            bsTooltip("retucol",'To change the heatmap colour, which corresponds to the intensity value in the expression data. Users should input three colour names here. The first one is for the lowest intensity value, the second one is for the middle intensity value, and the third one is for the highest intensity value.',
+            textInput("retucol",h5("4. Color for heatmap:"),value = "#4B0082;#B3B3B3;#CD5C5C"),
+            bsTooltip("retucol",'To change the heatmap color, which corresponds to the intensity value in the expression data. Users should input three color names here. Users can type in two color names with a semicolon. One color name can be a common English name (e.g. red, blue, yellow etc.), or a hex triplet (e.g. #FF0000, #0000FF, #FFFF00 etc.). The first one is for the lowest intensity value, the second one is for the middle intensity value, and the third one is for the highest intensity value.',
                       placement = "right",options = list(container = "body")),
-            textInput("duixianglinkcol",h5("5. Link color："),value = "green;pink"),
-            bsTooltip("duixianglinkcol",'To change the line colour. Users should type in two colour names with a semicolon. The first one indicates the negative fold change value (log2 here), and the second one corresponds to the positive fold change value (log2 here).',
+            textInput("duixianglinkcol",h5("5. Link color:"),value = "green;pink"),
+            bsTooltip("duixianglinkcol",'To change the line color. Users should type in two color names with a semicolon. The first one indicates the negative fold change value (log2 here), and the second one corresponds to the positive fold change value (log2 here).',
                       placement = "right",options = list(container = "body")),
-            numericInput("touminglink",h5("6. Link alpha："),value = 0.6,step = 0.1,max = 1,min = 0),
-            bsTooltip("touminglink",'To change line colour transparency. The value should be in (0, 1).',
+            numericInput("touminglink",h5("6. Link alpha:"),value = 0.6,step = 0.1,max = 1,min = 0),
+            bsTooltip("touminglink",'To change line color transparency. The value should be in (0, 1).',
                       placement = "right",options = list(container = "body")),
-            textInput("linkjianju",h5("7. Link end position："),value = "0.54;0.58"),
+            textInput("linkjianju",h5("7. Link end position:"),value = "0.54;0.58"),
             bsTooltip("linkjianju",'To change the line position to objects or IDs/terms. Users should type in two values here. The first one is for adjusting the line end distance to objects, and the second one is for adjusting the line end distance to IDs/terms. When the value is larger, the line end is further from the objects or IDs/terms.',
                       placement = "right",options = list(container = "body")),
-            numericInput("zitisize",h5("8. Label size："),value = 0.6,step = 0.1),
+            numericInput("zitisize",h5("8. Label size:"),value = 0.6,step = 0.1),
             bsTooltip("zitisize",'To change the size of labels.',
                       placement = "right",options = list(container = "body")),
             tags$hr(style="border-color: grey;"),
-            numericInput("trackheight",h5("9. Track height："),value = 0.3,step = 0.1,max = 1,min = 0),
+            numericInput("trackheight",h5("9. Track height:"),value = 0.3,step = 0.1,max = 1,min = 0),
             bsTooltip("trackheight",'To change the height of tracks. It is the percentage according to the radius of the unit circle. The height includes the top and bottom cell paddings but not the margins.',
                       placement = "right",options = list(container = "body")),
-            numericInput("gapdegree",h5("10. Gap degree："),value = 15,step = 0.5,max = 50,min = 1),
+            numericInput("gapdegree",h5("10. Gap degree:"),value = 15,step = 0.5,max = 50,min = 1),
             bsTooltip("gapdegree",'To change the gap between two neighbour sectors.',
                       placement = "right",options = list(container = "body")),
-            numericInput("startdegree",h5("11. Start degree："),value = -70,step = 0.5),
+            numericInput("startdegree",h5("11. Start degree:"),value = -70,step = 0.5),
             bsTooltip("startdegree",'To change the starting degree from which the circle begins to draw.',
                       placement = "right",options = list(container = "body")),
             tags$hr(style="border-color: grey;"),
-            textInput("fujileibiecol",h5("12. Color for category："),value = "blue;purple;red"),
-            bsTooltip("fujileibiecol",'To change the category colour. The colour names and category number should be the same, for instance, in the example data, there are three categories, so there should be three colours here, which are linked with semicolons.',
+            textInput("fujileibiecol",h5("12. Color for category:"),value = "blue;purple;red"),
+            bsTooltip("fujileibiecol",'To change the category color. The color names and category number should be the same, for instance, in the example data, there are three categories, so there should be three colors here, which are linked with semicolons.',
                       placement = "right",options = list(container = "body")),
-            textInput("fujibeiweizhi",h5("13. Adjusting inner position："),value = "6;-1_15;-1_25;-1"),
+            textInput("fujibeiweizhi",h5("13. Adjusting inner position:"),value = "6;-1_15;-1_25;-1"),
             bsTooltip("fujibeiweizhi",'To change the inner category title position. The position contains the values on the x-axis and y-axis linked with a semicolon. Every two positions are linked with an underline. For example, if "6;-1_15;-1_25;-1" is input here, it means that "6;-1" is for the first category ("BP") position ("6" is x-axis value, "-1" is y-axis value), "15;-1" is for the second category ("CC") position ("15" is x-axis value, "-1" is y-axis value), and "25;-1" is for the third category ("MF") position ("25" is x-axis value, "-1" is y-axis value).',
                       placement = "right",options = list(container = "body")),
-            textInput("fujiwaiweizhi",h5("14. Adjusting outer position and label："),value = "15;10_GO ID"),
+            textInput("fujiwaiweizhi",h5("14. Adjusting outer position and label:"),value = "15;10_GO ID"),
             bsTooltip("fujiwaiweizhi",'To change the outer title position and title text, they are connected with an underline. For example, if "15;10_GO ID" is input here, "15;10" is for the title position ("15" is x-axis value, "10" is y-axis value), and "GO ID" is the title.',
                       placement = "right",options = list(container = "body")),
             tags$hr(style="border-color: grey;"),
             checkboxInput("fugaicolif","15. Covering color or not?",TRUE),
-            bsTooltip("fugaicolif",'Whether to change the sector colours for every category. If selected, users will adjust the parameters, including Radius (radii for the outer arc and the inner arc in the sector, linked with a semicolon), Color (colours for sectors), Alpha (colour transparency), Angle (start and end degrees for every sector in a counterclockwise direction, linked with a semicolon, while the angles between every two sectors are linked with an underline — for instance, if "27;70.5_-13.5;27_-57;-13.5" is input here, "27;70.5" is for the first sector ("27" is the start degree, "70.5" is the end degree), "-13.5;27" is for the second sector ("-13.5" is the start degree, "27" is the end degree), and "-57;-13.5" is for the third sector ("-57" is the start degree, "-13.5" is the end degree)).',
+            bsTooltip("fugaicolif",'Whether to change the sector colors for every category. If selected, users will adjust the parameters, including Radius (radii for the outer arc and the inner arc in the sector, linked with a semicolon), Color (colors for sectors), Alpha (color transparency), Angle (start and end degrees for every sector in a counterclockwise direction, linked with a semicolon, while the angles between every two sectors are linked with an underline — for instance, if "27;70.5_-13.5;27_-57;-13.5" is input here, "27;70.5" is for the first sector ("27" is the start degree, "70.5" is the end degree), "-13.5;27" is for the second sector ("-13.5" is the start degree, "27" is the end degree), and "-57;-13.5" is for the third sector ("-57" is the start degree, "-13.5" is the end degree)).',
                       placement = "right",options = list(container = "body")),
             conditionalPanel(
               condition = "input.fugaicolif==true",
-              textInput("fugaibanjing","Radius：",value = "1;0.6"),
-              textInput("fugaicol","Color：",value = "blue;purple;red"),
-              numericInput("fugaicolalpha","Alpha：",value = 0.3,step = 0.1,max = 1,min = 0),
-              textInput("fugaiweizhi","Angle：",value = "27;70.5_-13.5;27_-57;-13.5")
+              textInput("fugaibanjing","Radius:",value = "1;0.6"),
+              textInput("fugaicol","Color:",value = "blue;purple;red"),
+              numericInput("fugaicolalpha","Alpha:",value = 0.3,step = 0.1,max = 1,min = 0),
+              textInput("fugaiweizhi","Angle:",value = "27;70.5_-13.5;27_-57;-13.5")
             ),
             tags$hr(style="border-color: grey;"),
             numericInput("linkpheight","Height for figure:",value = 900)
@@ -581,11 +622,11 @@ ui<-renderUI(
     )
   )
 )
-#
+#server
 server<-shinyServer(function(input, output, session){
   options(shiny.maxRequestSize=30*1024^2)
   usertimenum<-as.numeric(Sys.time())
-  #ui
+  #render a ui for "Welcome" panel
   output$welcomeui<-renderUI({
     screenwidth<-input$dimension[1]
     if(is.null(screenwidth)){
@@ -601,7 +642,6 @@ server<-shinyServer(function(input, output, session){
         imgwidth<-550
       }
     }
-
     fluidRow(
       div(
         id="mainbody",
@@ -634,10 +674,8 @@ server<-shinyServer(function(input, output, session){
       )
     )
   })
-  #show data
-  #######
+  #show enrichment result data
   enrichdataout<-reactive({
-    pacman::p_load(openxlsx,gdata)
     files <- input$metabopathfile1
     if(is.null(files)){
       dataread<-read.csv("example_enrich.csv",stringsAsFactors = F)
@@ -667,14 +705,34 @@ server<-shinyServer(function(input, output, session){
     }
     enrichdatacolns<-c("ID","Term","Category","Count","p.adjust","Objects")
     colnames(dataread)<-enrichdatacolns
-    dataread<-dataread[order(dataread$Count,decreasing = TRUE),]
+    if(input$enrichsortby=="Count"){
+      dataread<-dataread[order(dataread$Count,decreasing = TRUE),]
+    }else if(input$enrichsortby=="p.adjust"){
+      dataread<-dataread[order(dataread$p.adjust,decreasing = FALSE),]
+    }else{
+      dataread<-dataread
+    }
     dataread
   })
   output$enrichdata<-renderDataTable({
-    pacman::p_load(ComplexHeatmap,UpSetR,glue,ggplot2,DOSE,reshape2,ggridges)
     dataread<-enrichdataout()
     datatable(dataread, options = list(pageLength = 10))
   })
+  #If the input enrichment result data are not proper, this tool give a warning
+  output$inputenrichwarningui<-renderUI({
+    dataread<<-enrichdataout()
+    leibietable<-table(dataread$Category)
+    leibietable1<-paste0(dimnames(leibietable)[[1]],": ",as.numeric(leibietable),collapse = "; ")
+    if(class(dataread$Category)=="numeric"){
+      div(style="text-align:left;margin-top:10px;margin-bottom:15px;margin-right:150px;font-size:140%;color:darkred",
+          HTML("Warning: Please check the input enrichment result data. EnrichVisBox find that what you have uploaded here is not a right enrichment result file!"))
+    }else{
+      div(style="text-align:left;margin-top:10px;margin-bottom:15px;margin-right:150px;font-size:120%;color:blue",
+          HTML(paste0("Please note: The input enrichment result data contain ",
+                      leibietable1,".")))
+    }
+  })
+  #show expression data
   expressdataout<-reactive({
     files <- input$mfunctionalinkyibanfile1_fenzu
     if (is.null(files)){
@@ -703,18 +761,30 @@ server<-shinyServer(function(input, output, session){
                            row.names = rownametfmfunctionalinkyiban_fenzu, sep=input$mfunctionalinkyibansep_fenzu,stringsAsFactors = F)
       }
     }
-    dataread
+    groupinfox<-strsplit(input$groupinfo,";")[[1]]
+    groupinfox1<-as.numeric(groupinfox[1])
+    groupinfox2<-as.numeric(strsplit(groupinfox[2],"-")[[1]])
+    expressdatax<-dataread[,1:sum(groupinfox2)]#expressdataout()
+    if(input$calfcif){
+      if(input$logtansformedif){
+        expressdatax$Fold.Change<-rowMeans(expressdatax[,(groupinfox2[1]+1):ncol(expressdatax)])-rowMeans(expressdatax[,1:groupinfox2[1]])
+      }else{
+        expressdatax$Fold.Change<-log2(rowMeans(expressdatax[,(groupinfox2[1]+1):ncol(expressdatax)])/rowMeans(expressdatax[,1:groupinfox2[1]]))
+      }
+    }
+    #dataread
+    expressdatax
   })
   output$expressdata<-renderDataTable({
     datareadbj<-expressdataout()
-    datatable(datareadbj, options = list(pageLength = 10))
+    datatable(datareadbj[,-ncol(datareadbj)], options = list(pageLength = 10))#[,-ncol(datareadbj)]
   })
-  #
+  #figure height
   preheightx<-reactive({
     input$preheight
   })
+  #obtain a matrix that contains the relationships between every object and every ID/term.
   objesttoterm<-reactive({
-    pacman::p_load(clusterProfiler,enrichplot,circlize)
     enrichdatax<-enrichdataout()
     IDx<-lapply(enrichdatax$Objects,function(x) strsplit(x,"\\/\\s?|;\\s?|,\\s?")[[1]])
     if(input$showidif){
@@ -727,6 +797,34 @@ server<-shinyServer(function(input, output, session){
   })
   observeEvent(
     input$mcsbtn_Preview,{
+      #check the input enrichment result data, if there is any ID/term whose adjusted p value is above 0.05, this tool will give a warning.
+      output$warningui1<-renderUI({
+        precolorx<-strsplit(isolate(input$precolor),";")[[1]]
+        douhaox1<-grep(",",isolate(input$preindex))
+        douhaox2<-grep("-",isolate(input$preindex))
+        if(length(douhaox1)>0){
+          preindex1<-as.numeric(strsplit(isolate(input$preindex),",")[[1]])
+        }
+        if(length(douhaox2)>0){
+          preindex1x<-as.numeric(strsplit(isolate(input$preindex),"-")[[1]])
+          preindex1<-preindex1x[1]:preindex1x[2]
+        }
+        if(length(douhaox1)==0 & length(douhaox2)==0){
+          preindex1<-1:as.numeric(isolate(input$preindex))
+        }
+        
+        enrichdatax<-enrichdataout()
+        enrichdatax1<-enrichdatax[preindex1,]
+        pabove05index<-which(enrichdatax1$p.adjust>0.05)
+        if(length(pabove05index)>0){
+          div(style="text-align:left;margin-top:10px;margin-right:150px;font-size:140%;color:red",
+              HTML(paste0("Warning: Please check the input enrichment result data, EnrichVisBox find that the adjusted p values of some IDs/terms are above 0.05. The ID(s) is(are): ",
+                          paste0(enrichdatax1$ID[pabove05index],collapse = "; "),"."," If you think it is OK, just ignore this warning.")))
+        }else{
+          NULL
+        }
+      })
+      #dot plot for IDs/terms
       output$dotplotterm<-renderPlot({
         precolorx<-strsplit(isolate(input$precolor),";")[[1]]
         douhaox1<-grep(",",isolate(input$preindex))
@@ -758,6 +856,7 @@ server<-shinyServer(function(input, output, session){
               scale_size(range = c(2,10))+
               scale_color_gradient(low=precolorx[1],high=precolorx[2])+
               coord_polar(theta = "x")+
+              ylim(min(enrichdatax1$Count)/2, max(enrichdatax1$Count)*1.2)+
               theme_minimal()+
               theme(
                 legend.position = "right",
@@ -772,6 +871,7 @@ server<-shinyServer(function(input, output, session){
               scale_size(range = c(2,10))+#round(max(enrichdatax1$Count)*0.8)
               scale_color_gradient(low=precolorx[1],high=precolorx[2])+
               coord_polar(theta = "x")+
+              ylim(min(enrichdatax1$Count)/2, max(enrichdatax1$Count)*1.2)+
               theme_minimal()+
               theme(
                 legend.position = "right",
@@ -801,23 +901,23 @@ server<-shinyServer(function(input, output, session){
         dotplottermx
       },height = preheightx)
       dotplottermout<-reactive({
-        precolorx<-strsplit(input$precolor,";")[[1]]
-        douhaox1<-grep(",",input$preindex)
-        douhaox2<-grep("-",input$preindex)
+        precolorx<-strsplit(isolate(input$precolor),";")[[1]]
+        douhaox1<-grep(",",isolate(input$preindex))
+        douhaox2<-grep("-",isolate(input$preindex))
         if(length(douhaox1)>0){
-          preindex1<-as.numeric(strsplit(input$preindex,",")[[1]])
+          preindex1<-as.numeric(strsplit(isolate(input$preindex),",")[[1]])
         }
         if(length(douhaox2)>0){
-          preindex1x<-as.numeric(strsplit(input$preindex,"-")[[1]])
+          preindex1x<-as.numeric(strsplit(isolate(input$preindex),"-")[[1]])
           preindex1<-preindex1x[1]:preindex1x[2]
         }
         if(length(douhaox1)==0 & length(douhaox2)==0){
-          preindex1<-1:as.numeric(input$preindex)
+          preindex1<-1:as.numeric(isolate(input$preindex))
         }
-
+        
         enrichdatax<-enrichdataout()
         enrichdatax1<-enrichdatax[preindex1,]
-
+        
         if(input$classicmultisiteif){
           label_data<-enrichdatax1
           label_data$id=seq(1,nrow(label_data))
@@ -831,6 +931,7 @@ server<-shinyServer(function(input, output, session){
               scale_size(range = c(2,10))+
               scale_color_gradient(low=precolorx[1],high=precolorx[2])+
               coord_polar(theta = "x")+
+              ylim(min(enrichdatax1$Count)/2, max(enrichdatax1$Count)*1.2)+
               theme_minimal()+
               theme(
                 legend.position = "right",
@@ -842,9 +943,10 @@ server<-shinyServer(function(input, output, session){
           }else{
             dotplottermx<-ggplot(enrichdatax1, aes(x = reorder(Term,Count), y = Count,size=Count))+
               geom_point(aes(color=p.adjust))+ #coord_flip()+
-              scale_size(range = c(2,10))+
+              scale_size(range = c(2,10))+#round(max(enrichdatax1$Count)*0.8)
               scale_color_gradient(low=precolorx[1],high=precolorx[2])+
               coord_polar(theta = "x")+
+              ylim(min(enrichdatax1$Count)/2, max(enrichdatax1$Count)*1.2)+
               theme_minimal()+
               theme(
                 legend.position = "right",
@@ -881,7 +983,7 @@ server<-shinyServer(function(input, output, session){
           dev.off()
         }
       )
-      #
+      #dot plot for objects
       output$dotplotobject<-renderPlot({
         objesttotermx<-objesttoterm()
         objesttotermx1<-data.frame(Objects=rownames(objesttotermx),Count=apply(objesttotermx,1,sum),stringsAsFactors = F)
@@ -912,6 +1014,7 @@ server<-shinyServer(function(input, output, session){
             scale_size(range = c(2,10))+#round(max(enrichdatax1$Count)*0.8)
             scale_color_gradient(low=precolorx[1],high=precolorx[2])+
             coord_polar(theta = "x")+
+            ylim(min(enrichdatax1$Count)/2, max(enrichdatax1$Count)*1.2)+
             theme_minimal()+
             theme(
               legend.position = "right",
@@ -960,6 +1063,7 @@ server<-shinyServer(function(input, output, session){
             scale_size(range = c(2,10))+#round(max(enrichdatax1$Count)*0.8)
             scale_color_gradient(low=precolorx[1],high=precolorx[2])+
             coord_polar(theta = "x")+
+            ylim(min(enrichdatax1$Count)/2, max(enrichdatax1$Count)*1.2)+
             theme_minimal()+
             theme(
               legend.position = "right",
@@ -986,7 +1090,7 @@ server<-shinyServer(function(input, output, session){
           dev.off()
         }
       )
-      #
+      #upSet plot
       output$upSetplot<-renderPlot({
         objesttotermx<-objesttoterm()
         precolorupsetx<-strsplit(isolate(input$precolorupset),";")[[1]]
@@ -1038,17 +1142,23 @@ server<-shinyServer(function(input, output, session){
   preheightx2<-reactive({
     input$preheight2
   })
-
   observeEvent(
     input$mcsbtn_Polarplot,{
+      #polar plot
       output$roseplotplot<-renderPlot({
         polarindexx<-as.numeric(strsplit(isolate(input$polarindex),";")[[1]])
         barcolx<-strsplit(input$barcolor,";")[[1]]
         enrichdatax<-enrichdataout()
-
+        if(input$polarshowidif){
+          enrichdatax<-enrichdatax
+        }else{
+          enrichdatax$ID<-enrichdatax$Term
+        }
+        
         if(input$leibieif){
+          leibietypex<-strsplit(input$leibietype,";")[[1]]
           leibiecolx<-strsplit(isolate(input$leibiecol),";")[[1]]
-          termclassname<-dimnames(table(enrichdatax$Category))[[1]]
+          termclassname<-leibietypex#dimnames(table(enrichdatax$Category))[[1]]
           dataread<-NULL
           for(i in 1:length(termclassname)){
             dataread1<-enrichdatax[enrichdatax$Category==termclassname[i],]
@@ -1081,13 +1191,15 @@ server<-shinyServer(function(input, output, session){
           }
           roseplot_dp <- eval(parse(text = glue(roseplot_dp1)))+
             coord_polar(start = input$labeljiaodu) +
-            theme_minimal() +
+            theme_bw() +
             labs(x = NULL, y = NULL) +
             scale_fill_gradient(low=barcolx[1], high=barcolx[2])+
             scale_color_manual(name=datacolnames[3],labels = dimnames(dat1table)[[1]], values = leibiecolx)+
-            theme(axis.text.y = element_blank(),
+            theme(#axis.text.y = element_blank(),
                   axis.text.x = element_blank(),
-                  panel.grid = element_blank())+
+                  #panel.grid.major.x= element_blank(),
+                  panel.grid.minor = element_blank()
+                  )+
             geom_text(data=dat_label, aes_string(x="id", y=max(dat1[[4]])+input$labelyuanjin, label=datacolnames[1], hjust="hjust"),
                       color="black", fontface="bold",alpha=0.6, size=input$lablesize, angle= dat_label$angle, inherit.aes = FALSE )
         }else{
@@ -1107,12 +1219,14 @@ server<-shinyServer(function(input, output, session){
             geom_bar(aes_string(x = "ID", fill = "p.adjust", y = "Count"),stat = "identity", position = "dodge", width = 1) +
             scale_x_discrete()+
             coord_polar(start = input$labeljiaodu) +
-            theme_minimal() +
+            theme_bw() +
             labs(x = NULL, y = NULL) +
             scale_fill_gradient(low=barcolx[1], high=barcolx[2])+
-            theme(axis.text.y = element_blank(),
-                  axis.text.x = element_blank(),
-                  panel.grid = element_blank())+
+            theme(#axis.text.y = element_blank(),
+              axis.text.x = element_blank(),
+              #panel.grid.major.x= element_blank(),
+              panel.grid.minor = element_blank()
+            )+
             geom_text(data=dat_label, aes_string(x="id", y=max(dat1[[4]])+input$labelyuanjin, label=datacolnames[1], hjust="hjust"),
                       color="black", fontface="bold",alpha=0.6, size=input$lablesize, angle= dat_label$angle, inherit.aes = FALSE )
         }
@@ -1122,10 +1236,16 @@ server<-shinyServer(function(input, output, session){
         polarindexx<-as.numeric(strsplit(isolate(input$polarindex),";")[[1]])
         barcolx<-strsplit(input$barcolor,";")[[1]]
         enrichdatax<-enrichdataout()
-
+        if(input$polarshowidif){
+          enrichdatax<-enrichdatax
+        }else{
+          enrichdatax$ID<-enrichdatax$Term
+        }
+        
         if(input$leibieif){
+          leibietypex<-strsplit(input$leibietype,";")[[1]]
           leibiecolx<-strsplit(isolate(input$leibiecol),";")[[1]]
-          termclassname<-dimnames(table(enrichdatax$Category))[[1]]
+          termclassname<-leibietypex#dimnames(table(enrichdatax$Category))[[1]]
           dataread<-NULL
           for(i in 1:length(termclassname)){
             dataread1<-enrichdatax[enrichdatax$Category==termclassname[i],]
@@ -1134,7 +1254,7 @@ server<-shinyServer(function(input, output, session){
           }
           dat1<-dat<-dataread
           datacolnames<-colnames(dat)
-
+          
           #dat1<-dat1[order(dat1[[4]]),]
           dat1[[1]]<-factor(dat[[1]],levels = dat[[1]])
           dat1$id<-1:nrow(dat1)
@@ -1143,7 +1263,7 @@ server<-shinyServer(function(input, output, session){
           angle= 90 - 360 * (dat_label$id-0.5) /number_of_bar
           dat_label$hjust<-ifelse( angle < -90, 1, 0)
           dat_label$angle<-ifelse(angle < -90, angle+180, angle)
-
+          
           dat1table<-table(dat1[[3]])
           dat1tablenum<-as.numeric(dat1table)
           dat1tablenum2<-c(0,cumsum(dat1tablenum))
@@ -1158,16 +1278,20 @@ server<-shinyServer(function(input, output, session){
           }
           roseplot_dp <- eval(parse(text = glue(roseplot_dp1)))+
             coord_polar(start = input$labeljiaodu) +
-            theme_minimal() +
+            theme_bw() +
             labs(x = NULL, y = NULL) +
             scale_fill_gradient(low=barcolx[1], high=barcolx[2])+
             scale_color_manual(name=datacolnames[3],labels = dimnames(dat1table)[[1]], values = leibiecolx)+
-            theme(axis.text.y = element_blank(),
-                  axis.text.x = element_blank(),
-                  panel.grid = element_blank())+
+            theme(#axis.text.y = element_blank(),
+              axis.text.x = element_blank(),
+              #panel.grid.major.x= element_blank(),
+              panel.grid.minor = element_blank()
+            )+
             geom_text(data=dat_label, aes_string(x="id", y=max(dat1[[4]])+input$labelyuanjin, label=datacolnames[1], hjust="hjust"),
                       color="black", fontface="bold",alpha=0.6, size=input$lablesize, angle= dat_label$angle, inherit.aes = FALSE )
         }else{
+          dat1<-dat<-enrichdatax[1:sum(polarindexx),]
+          datacolnames<-colnames(dat)
           dat1[[1]]<-factor(dat[[1]],levels = dat[[1]])
           dat1$id<-1:nrow(dat1)
           dat_label<-dat1
@@ -1175,19 +1299,21 @@ server<-shinyServer(function(input, output, session){
           angle= 90 - 360 * (dat_label$id-0.5) /number_of_bar
           dat_label$hjust<-ifelse( angle < -90, 1, 0)
           dat_label$angle<-ifelse(angle < -90, angle+180, angle)
-
+          
           roseplot_dp <- ggplot(data = dat1) +
             geom_hline(yintercept = seq(.5, max(dat1[[4]])+2.5, by = 3),color = "#F5F5F5",size = .5)+
             geom_vline(xintercept = seq(.5, dim(dat1)[1]+.5, by = 1),color = "#F5F5F5",size = .5) +
             geom_bar(aes_string(x = "ID", fill = "p.adjust", y = "Count"),stat = "identity", position = "dodge", width = 1) +
             scale_x_discrete()+
             coord_polar(start = input$labeljiaodu) +
-            theme_minimal() +
+            theme_bw() +
             labs(x = NULL, y = NULL) +
             scale_fill_gradient(low=barcolx[1], high=barcolx[2])+
-            theme(axis.text.y = element_blank(),
-                  axis.text.x = element_blank(),
-                  panel.grid = element_blank())+
+            theme(#axis.text.y = element_blank(),
+              axis.text.x = element_blank(),
+              #panel.grid.major.x= element_blank(),
+              panel.grid.minor = element_blank()
+            )+
             geom_text(data=dat_label, aes_string(x="id", y=max(dat1[[4]])+input$labelyuanjin, label=datacolnames[1], hjust="hjust"),
                       color="black", fontface="bold",alpha=0.6, size=input$lablesize, angle= dat_label$angle, inherit.aes = FALSE )
         }
@@ -1203,20 +1329,19 @@ server<-shinyServer(function(input, output, session){
         }
       )
     })
-
-
   #
   preheightx3<-reactive({
     input$preheight3
   })
   observeEvent(
     input$mcsbtn_networkp,{
+      #Network Plot
       output$networkp<-renderPlot({
-        netdotcolorx<-strsplit(isolate(input$netdotcolor),";")[[1]]
-        douhaox1<-grep(",",isolate(input$netindex))
-        douhaox2<-grep("-",isolate(input$netindex))
+        netdotcolorx<<-strsplit(isolate(input$netdotcolor),";")[[1]]
+        douhaox1<<-grep(",",isolate(input$netindex))
+        douhaox2<<-grep("-",isolate(input$netindex))
         if(length(douhaox1)>0){
-          preindex1<-as.numeric(strsplit(isolate(input$netindex),",")[[1]])
+          preindex1<<-as.numeric(strsplit(isolate(input$netindex),",")[[1]])
         }
         if(length(douhaox2)>0){
           preindex1x<-as.numeric(strsplit(isolate(input$netindex),"-")[[1]])
@@ -1225,17 +1350,13 @@ server<-shinyServer(function(input, output, session){
         if(length(douhaox1)==0 & length(douhaox2)==0){
           preindex1<-1:as.numeric(isolate(input$netindex))
         }
-
-        expressdatax<-expressdataout()
+        expressdatax<<-expressdataout()
         fcdata<-expressdatax[,ncol(expressdatax)]
         names(fcdata)<-rownames(expressdatax)
 
         enrichdatax<-enrichdataout()
         enrichdatax1<-enrichdatax[preindex1,]
-        #xnew<-new("enrichResult",result=enrichdatax1,
-        #          organism = "UNKNOWN", keytype = "UNKNOWN", ontology = "UNKNOWN",
-        #          readable = FALSE)
-        edgecolorx<<-strsplit(isolate(input$edgecolor),";")[[1]]
+        edgecolorx<-strsplit(isolate(input$edgecolor),";")[[1]]
         if(input$networkpxuanze==1){
           if(input$nettype=="kk"){
             cnetplot.enrichResult(x=enrichdatax1,foldChange = fcdata,layout = "kk",
@@ -1272,10 +1393,7 @@ server<-shinyServer(function(input, output, session){
 
         enrichdatax<-enrichdataout()
         enrichdatax1<-enrichdatax[preindex1,]
-        #xnew<-new("enrichResult",result=enrichdatax1,
-        #          organism = "UNKNOWN", keytype = "UNKNOWN", ontology = "UNKNOWN",
-        #          readable = FALSE)
-        edgecolorx<<-strsplit(isolate(input$edgecolor),";")[[1]]
+        edgecolorx<-strsplit(isolate(input$edgecolor),";")[[1]]
         if(input$networkpxuanze==1){
           if(input$nettype=="kk"){
             cnetplot.enrichResult(x=enrichdatax1,foldChange = fcdata,layout = "kk",
@@ -1307,6 +1425,7 @@ server<-shinyServer(function(input, output, session){
   })
   observeEvent(
     input$mcsbtn_heatmap,{
+      #Heatmap plot
       output$Heatmap<-renderPlot({
         netdotcolorx<-strsplit(isolate(input$heatmapcolor),";")[[1]]
         douhaox1<-grep(",",isolate(input$heatmapindex))
@@ -1403,6 +1522,7 @@ server<-shinyServer(function(input, output, session){
   })
   observeEvent(
     input$mcsbtn_ridgeline,{
+      #Ridgeline plot
       output$ridgeline<-renderPlot({
         netdotcolorx<-strsplit(isolate(input$ridgelinecolor),";")[[1]]
         douhaox1<-grep(",",isolate(input$ridgelineindex))
@@ -1426,7 +1546,7 @@ server<-shinyServer(function(input, output, session){
         enrichdatax1<-enrichdatax[preindex1,]
 
         ridgeplot.gseaResult(x=enrichdatax1, foldChange=fcdata, palette=netdotcolorx,
-                             fill="p.adjust", node_label = input$ridgelineshowidif)
+                             fill="p.adjust", node_label = input$ridgelineshowidif,type=input$ridgelinestat)
       },height = preheightx5)
       ridgelineout<-reactive({
         netdotcolorx<-strsplit(isolate(input$ridgelinecolor),";")[[1]]
@@ -1451,7 +1571,7 @@ server<-shinyServer(function(input, output, session){
         enrichdatax1<-enrichdatax[preindex1,]
 
         ridgeplot.gseaResult(x=enrichdatax1, foldChange=fcdata, palette=netdotcolorx,
-                             fill="p.adjust", node_label = input$ridgelineshowidif)
+                             fill="p.adjust", node_label = input$ridgelineshowidif,type=input$ridgelinestat)
       })
       output$ridgelinedl<-downloadHandler(
         filename = function(){paste("Ridgeline",usertimenum,".pdf",sep="")},
@@ -1469,6 +1589,7 @@ server<-shinyServer(function(input, output, session){
   })
   observeEvent(
     input$mcsbtn_mfunctionalink,{
+      #Variant chord plot
       output$mfunctionalinkplot<-renderPlot({
         enrichdatax<-enrichdataout()
         linkpindexx<-as.numeric(strsplit(input$linkpindex,";")[[1]])
@@ -1480,12 +1601,12 @@ server<-shinyServer(function(input, output, session){
           dataread<-rbind(dataread,dataread2)
         }
         expressdatax<-expressdataout()
-        #expressdatax1<-expressdatax[,-ncol(expressdatax)]
-
-        #objectnames<-unique(unlist(lapply(dataread$Objects,function(x)strsplit(x,"/")[[1]])))
         expressdatax1<-expressdatax[1:input$objectnum,]
-        expressdatax2<-expressdatax1[,-ncol(expressdatax1)]
-        fcdata<-expressdatax1[,ncol(expressdatax1)]
+        expressdatax2x<-expressdatax1[,-ncol(expressdatax1)]
+        expressdatax2dist<-dist(expressdatax2x, method="euclidean")
+        expressdatax2clust<-hclust(expressdatax2dist, method='complete')
+        expressdatax2<-expressdatax2x[expressdatax2clust$order,]
+        fcdata<-expressdatax1[expressdatax2clust$order,ncol(expressdatax1)]
         hytestrawdata2<-t(expressdatax2)
         enrichres3<-dataread
 
@@ -1596,26 +1717,28 @@ server<-shinyServer(function(input, output, session){
         }
         expressdatax<-expressdataout()
         #expressdatax1<-expressdatax[,-ncol(expressdatax)]
-
         #objectnames<-unique(unlist(lapply(dataread$Objects,function(x)strsplit(x,"/")[[1]])))
         expressdatax1<-expressdatax[1:input$objectnum,]
-        expressdatax2<-expressdatax1[,-ncol(expressdatax1)]
-        fcdata<-expressdatax1[,ncol(expressdatax1)]
+        expressdatax2x<-expressdatax1[,-ncol(expressdatax1)]
+        expressdatax2dist<-dist(expressdatax2x, method="euclidean")
+        expressdatax2clust<-hclust(expressdatax2dist, method='complete')
+        expressdatax2<-expressdatax2x[expressdatax2clust$order,]
+        fcdata<-expressdatax1[expressdatax2clust$order,ncol(expressdatax1)]
         hytestrawdata2<-t(expressdatax2)
         enrichres3<-dataread
-
+        
         retucolx<-strsplit(isolate(input$retucol),";")[[1]]
         fujileibiecolx<-strsplit(isolate(input$fujileibiecol),";")[[1]][as.numeric(factor(enrichres3$Category))]
         duixianglinkcolx<-strsplit(isolate(input$duixianglinkcol),";")[[1]]
         duixianglinkcolx1<-ifelse(fcdata>0,duixianglinkcolx[1],duixianglinkcolx[2])
-
+        
         rangeres1<-round(range(hytestrawdata2))
         colxx <-col_funxx<- colorRamp2(c(rangeres1[1]-0.5, mean(rangeres1), rangeres1[2]+0.5), retucolx)
         factorsx <- rep(letters[1:2], times = c(ncol(hytestrawdata2), nrow(enrichres3)))
         trackheightx<-as.numeric(isolate(input$trackheight))
         gapdegreex<-as.numeric(isolate(input$gapdegree))
         startdegreex<-as.numeric(isolate(input$startdegree))
-
+        
         circos.clear()
         circos.par("canvas.xlim" = c(-1, 1.5), "canvas.ylim" = c(-1, 1),"track.height"=trackheightx,
                    cell.padding = c(0, 0, 0, 0), gap.degree = gapdegreex, start.degree = startdegreex)
@@ -1633,7 +1756,7 @@ server<-shinyServer(function(input, output, session){
                     labels=colnames(hytestrawdata2),minor.ticks=0,labels.cex=isolate(input$zitisize))
         circos.yaxis(side ="right",at=1:nrow(hytestrawdata2),labels = rev(rownames(hytestrawdata2)),labels.cex=isolate(input$zitisize))
         circos.yaxis(side ="left",at=1:nrow(hytestrawdata2),labels = rev(rownames(hytestrawdata2)),labels.cex=isolate(input$zitisize))
-
+        
         circos.update(sector.index = "b")
         countratio1<-enrichres3$Count/max(enrichres3$Count)*nrow(hytestrawdata2)
         circos.lines(1:nrow(enrichres3)-0.5, nrow(hytestrawdata2)-countratio1,
@@ -1648,7 +1771,7 @@ server<-shinyServer(function(input, output, session){
         circos.yaxis(side ="left",at=seq(0,nrow(hytestrawdata2),by=2),
                      labels =paste0(seq(max(enrichres3$Count),0,by=-2*round(max(enrichres3$Count)/nrow(hytestrawdata2)))),
                      labels.cex=isolate(input$zitisize))
-
+        
         fujibeiweizhix<-strsplit(isolate(input$fujibeiweizhi),"_")[[1]]
         leibienames<-unique(enrichres3$Category)
         for(i1 in 1:length(leibienames)){
@@ -1664,7 +1787,7 @@ server<-shinyServer(function(input, output, session){
         circos.text(fujiwaiweizhix1[1],fujiwaiweizhix1[2],labels = fujiwaiweizhix[2],
                     sector.index ="b",facing = "bending.outside", cex = 1.2)
         fugaibanjingx<-as.numeric(strsplit(isolate(input$fugaibanjing),";")[[1]])
-
+        
         if(isolate(input$fugaicolif)){
           fugaicolx<-strsplit(isolate(input$fugaicol),";")[[1]]
           fugaiweizhix<-strsplit(isolate(input$fugaiweizhi),"_")[[1]]
@@ -1677,7 +1800,7 @@ server<-shinyServer(function(input, output, session){
         #draw.sector(18,43.5, rou1 = 1, rou2 = 0.6, col = adjustcolor("red", alpha.f =0.3), clock.wise = FALSE)
         #draw.sector(-10,18, rou1 = 1, rou2 = 0.6, col = adjustcolor("blue", alpha.f =0.3), clock.wise = FALSE)
         #draw.sector(-35,-10, rou1 = 1, rou2 = 0.6, col = adjustcolor("purple", alpha.f =0.3), clock.wise = FALSE)
-
+        
         linkjianjux<-as.numeric(strsplit(isolate(input$linkjianju),";")[[1]])
         xx1<-seq(0.5,ncol(hytestrawdata2))
         xx2<-colnames(hytestrawdata2)
@@ -1692,9 +1815,9 @@ server<-shinyServer(function(input, output, session){
             }
           }
         }
-
+        
         circos.clear()
-
+        
         lgd_links = Legend(at = c(rangeres1[1]-0.5, mean(rangeres1), rangeres1[2]+0.5),col_fun = col_funxx,
                            title_position = "topleft", title = "Intensity", direction = "horizontal")
         draw(lgd_links, x = unit(1, "npc") - unit(80, "mm"), y = unit(40, "mm"), just = "top")
