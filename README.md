@@ -23,7 +23,7 @@ runApp(".../EnrichVisBox/SourceCodes")
 ```
 
 ## 4. Example Figures
-<img src="Figure_example.png" align="center" height="700" width="800"/>
+<img src="Figure examples.png" align="center" height="700" width="800"/>
 
 ## 5. Other References
 5.1 Wickham H. [ggplot2](https://ggplot2.tidyverse.org): elegant graphics for data analysis.
