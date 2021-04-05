@@ -72,7 +72,7 @@ cnetplot.enrichResult <- function(x,
 overlap_ratio <- function(x, y) {
   x <- unlist(x)
   y <- unlist(y)
-  length(intersect(x, y))/length(unique(c(x,y)))
+  length(intersect(x, y))#/length(unique(c(x,y)))
 }
 emapplot.enrichResult <- function(x, colorx="p.adjust", palette=c("darkgreen", "#B3B3B3", "red"),
                                   layout = "kk", node_label = FALSE) {
@@ -143,7 +143,7 @@ emapplot.enrichResult <- function(x, colorx="p.adjust", palette=c("darkgreen", "
   p <- ggraph(g, layout=layout)
 
   if (length(E(g)$width) > 0) {
-    p <- p + geom_edge_link(alpha=.8, aes_(width=~I(width)), colour='darkgrey')
+    p <- p + geom_edge_link(alpha=.8, aes(width=width), colour='darkgrey')#aes_(width=~I(width))
   }
 
   p + geom_node_point(aes_(color=~colorx, size=~size)) +
@@ -154,7 +154,7 @@ emapplot.enrichResult <- function(x, colorx="p.adjust", palette=c("darkgreen", "
     scale_size(range=c(3, 10))
 }
 ridgeplot.gseaResult <- function(x, foldChange=NULL, palette=c("darkgreen", "red"),
-                                 fill="p.adjust", node_label = FALSE) {
+                                 fill="p.adjust", node_label = FALSE,type="density") {
   n <- nrow(x)
   #gs2id <- x@geneSets[x$ID[seq_len(n)]]
   geneSets <- lapply(x$Objects,function(x)strsplit(x,"/")[[1]]) #enrichplot:::extract_geneSets(x, showCategory)
@@ -188,10 +188,20 @@ ridgeplot.gseaResult <- function(x, foldChange=NULL, palette=c("darkgreen", "red
   colnames(gs2val.df)[2] <- fill
   gs2val.df$category <- factor(gs2val.df$category, levels=nn[j])
 
-  ggplot(gs2val.df, aes_string(x="value", y="category", fill=fill)) + geom_density_ridges() +
-    ## scale_x_reverse() +
-    scale_fill_continuous(low=palette[1], high=palette[2], name = fill, guide=guide_colorbar(reverse=TRUE)) +
-    ## scale_fill_gradientn(name = fill, colors=sig_palette, guide=guide_colorbar(reverse=TRUE)) +
-    ## geom_vline(xintercept=0, color='firebrick', linetype='dashed') +
-    xlab("Fold Change") + ylab(NULL) +  theme_dose()
+  if(type=="density"){
+    ggplot(gs2val.df, aes_string(x="value", y="category", fill=fill)) + geom_density_ridges() +
+      ## scale_x_reverse() +
+      scale_fill_continuous(low=palette[1], high=palette[2], name = fill, guide=guide_colorbar(reverse=TRUE)) +
+      ## scale_fill_gradientn(name = fill, colors=sig_palette, guide=guide_colorbar(reverse=TRUE)) +
+      ## geom_vline(xintercept=0, color='firebrick', linetype='dashed') +
+      xlab("Fold Change") + ylab(NULL) +  theme_dose()
+  }else{
+    ggplot(gs2val.df, aes_string(x="value", y="category", fill=fill)) + 
+      geom_density_ridges(alpha=0.9, stat="binline", bins=50) +
+      ## scale_x_reverse() +
+      scale_fill_continuous(low=palette[1], high=palette[2], name = fill, guide=guide_colorbar(reverse=TRUE)) +
+      ## scale_fill_gradientn(name = fill, colors=sig_palette, guide=guide_colorbar(reverse=TRUE)) +
+      ## geom_vline(xintercept=0, color='firebrick', linetype='dashed') +
+      xlab("Fold Change") + ylab(NULL) +  theme_dose()
+  }
 }
