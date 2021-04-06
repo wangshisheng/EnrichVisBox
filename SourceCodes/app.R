@@ -771,6 +771,9 @@ server<-shinyServer(function(input, output, session){
       }else{
         expressdatax$Fold.Change<-log2(rowMeans(expressdatax[,(groupinfox2[1]+1):ncol(expressdatax)])/rowMeans(expressdatax[,1:groupinfox2[1]]))
       }
+    }else{
+      expressdatax<-dataread
+      colnames(expressdatax)[ncol(dataread)]<-"Fold.Change"
     }
     #dataread
     expressdatax
