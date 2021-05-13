@@ -7,7 +7,7 @@
 
 ## 2. Detailed Introduction
 The usage about this tool can be found here:
-[https://github.com/wangshisheng/EnrichVisBox/blob/master/Supplementary_file.pdf](https://github.com/wangshisheng/EnrichVisBox/blob/master/Supplementary_file.pdf).
+[https://github.com/wangshisheng/EnrichVisBox/blob/master/Supplementary_file.pdf](https://github.com/wangshisheng/EnrichVisBox/blob/master/Supplementary_Notes.pdf).
 
 ## 3. Run EnrichVisBox locally
 If users want to run this tool on their own computer, they should install R and RStudio first, as shown below:
