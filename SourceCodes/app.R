@@ -282,8 +282,17 @@ ui<-renderUI(
             bsTooltip("showidif",'The label in the dot plot is shown with IDs or Terms, the default is with IDs.',
                       placement = "right",options = list(container = "body")),
             textInput('precolorupset', h5('5. Color for upset plot:'), "#4B0082;#CD5C5C;#E64B35FF"),
-            bsTooltip("precolorupset",' To change colors in the upset plot. Users can type in three color names with two semicolons. One color name can be a common English name (e.g. red, blue, yellow etc.), or a hex triplet (e.g. #FF0000, #0000FF, #FFFF00 etc.). The first one is the color of the set size bar plot, the second one is the color of the intersection points, and the third one is the color of the main bar plot.',
+            bsTooltip("precolorupset",'To change colors in the upset plot. Users can type in three color names with two semicolons. One color name can be a common English name (e.g. red, blue, yellow etc.), or a hex triplet (e.g. #FF0000, #0000FF, #FFFF00 etc.). The first one is the color of the set size bar plot, the second one is the color of the intersection points, and the third one is the color of the main bar plot.',
                       placement = "right",options = list(container = "body")),
+            checkboxInput("generatioif","6. Show 'Gene Ratio' instead of 'Count'?",FALSE),#/Protein
+            bsTooltip("generatioif",'If true, users should type in the total ID number below. And the total number can be obtained easily after they process the enrichment analysis. Then the count number will be replaced by gene ratio in the dot plot. If false, just ignore this parameter.',
+                      placement = "right",options = list(container = "body")),
+            conditionalPanel(
+              condition = "input.generatioif==true",
+              numericInput("generationum",h5("6.1. Please type in the total ID number:"),value = 46),
+              bsTooltip("generationum",'Please change this value based on your own data, the default value is used for the example data.',
+                        placement = "right",options = list(container = "body"))
+            ),
             tags$hr(style="border-color: grey;"),
             numericInput("preheight","Height for figure:",value = 800),
             hr(),
@@ -829,7 +838,7 @@ server<-shinyServer(function(input, output, session){
       })
       #dot plot for IDs/terms
       output$dotplotterm<-renderPlot({
-        precolorx<-strsplit(isolate(input$precolor),";")[[1]]
+        precolorx<<-strsplit(isolate(input$precolor),";")[[1]]
         douhaox1<-grep(",",isolate(input$preindex))
         douhaox2<-grep("-",isolate(input$preindex))
         if(length(douhaox1)>0){
@@ -843,62 +852,117 @@ server<-shinyServer(function(input, output, session){
           preindex1<-1:as.numeric(isolate(input$preindex))
         }
 
-        enrichdatax<-enrichdataout()
-        enrichdatax1<-enrichdatax[preindex1,]
+        enrichdatax<<-enrichdataout()
+        if(input$generatioif){
+          enrichdatax$GeneRatio<-enrichdatax$Count/input$generationum
+        }
+        enrichdatax1<<-enrichdatax[preindex1,]
 
         if(input$classicmultisiteif){
           label_data<-enrichdatax1
           label_data$id=seq(1,nrow(label_data))
           number_of_bar=nrow(label_data)
           angle= 90 - 360 * (label_data$id) /number_of_bar
-          label_data$hjust<-ifelse( angle < -90, 1, 0)
+          label_data$hjust<-ifelse(angle < -90, 1, 0)
           label_data$angle<-ifelse(angle < -90, angle+180, angle)
           if(input$showidif){
-            dotplottermx<-ggplot(enrichdatax1, aes(x = reorder(ID,Count), y = Count,size=Count))+
-              geom_point(aes(color=p.adjust))+ #coord_flip()+
-              scale_size(range = c(2,10))+
-              scale_color_gradient(low=precolorx[1],high=precolorx[2])+
-              coord_polar(theta = "x")+
-              ylim(min(enrichdatax1$Count)/2, max(enrichdatax1$Count)*1.2)+
-              theme_minimal()+
-              theme(
-                legend.position = "right",
-                axis.text = element_blank(),
-                axis.title = element_blank()
-              ) +
-              geom_text(data=label_data, aes(x=id, y=rev(Count)+0.5, label=rev(ID), hjust=hjust), color="black",
-                        alpha=0.8, size=3, angle= label_data$angle+8*20/nrow(enrichdatax1), inherit.aes = FALSE)
+            if(input$generatioif){
+              dotplottermx<-ggplot(enrichdatax1, aes(x = reorder(ID,GeneRatio), y = GeneRatio,size=Count))+
+                geom_point(aes(color=p.adjust))+ #coord_flip()+
+                scale_size(range = c(2,10))+
+                scale_color_gradient(low=precolorx[1],high=precolorx[2])+
+                coord_polar(theta = "x")+
+                ylim(min(enrichdatax1$GeneRatio)/2, max(enrichdatax1$GeneRatio)*1.2)+
+                theme_minimal()+
+                theme(
+                  legend.position = "right",
+                  axis.text = element_blank(),
+                  axis.title = element_blank()
+                ) +
+                geom_text(data=label_data, aes(x=id, y=rev(GeneRatio)+min(enrichdatax1$GeneRatio)/10, label=rev(ID), hjust=hjust), color="black",
+                          alpha=0.8, size=3, angle= label_data$angle+8*20/nrow(enrichdatax1), inherit.aes = FALSE)
+            }else{
+              dotplottermx<-ggplot(enrichdatax1, aes(x = reorder(ID,Count), y = Count,size=Count))+
+                geom_point(aes(color=p.adjust))+ #coord_flip()+
+                scale_size(range = c(2,10))+
+                scale_color_gradient(low=precolorx[1],high=precolorx[2])+
+                coord_polar(theta = "x")+
+                ylim(min(enrichdatax1$Count)/2, max(enrichdatax1$Count)*1.2)+
+                theme_minimal()+
+                theme(
+                  legend.position = "right",
+                  axis.text = element_blank(),
+                  axis.title = element_blank()
+                ) +
+                geom_text(data=label_data, aes(x=id, y=rev(Count)+0.5, label=rev(ID), hjust=hjust), color="black",
+                          alpha=0.8, size=3, angle= label_data$angle+8*20/nrow(enrichdatax1), inherit.aes = FALSE)
+            }
           }else{
-            dotplottermx<-ggplot(enrichdatax1, aes(x = reorder(Term,Count), y = Count,size=Count))+
-              geom_point(aes(color=p.adjust))+ #coord_flip()+
-              scale_size(range = c(2,10))+#round(max(enrichdatax1$Count)*0.8)
-              scale_color_gradient(low=precolorx[1],high=precolorx[2])+
-              coord_polar(theta = "x")+
-              ylim(min(enrichdatax1$Count)/2, max(enrichdatax1$Count)*1.2)+
-              theme_minimal()+
-              theme(
-                legend.position = "right",
-                axis.text = element_blank(),
-                axis.title = element_blank()
-              ) +
-              geom_text(data=label_data, aes(x=id, y=rev(Count)+0.5, label=rev(Term), hjust=hjust), color="black",
-                        alpha=0.8, size=3, angle= label_data$angle+8*20/nrow(enrichdatax1), inherit.aes = FALSE)
+            if(input$generatioif){
+              dotplottermx<-ggplot(enrichdatax1, aes(x = reorder(stringr::str_wrap(Term, 25),GeneRatio), y = GeneRatio,size=Count))+
+                geom_point(aes(color=p.adjust))+ #coord_flip()+
+                scale_size(range = c(2,10))+#round(max(enrichdatax1$Count)*0.8)
+                scale_color_gradient(low=precolorx[1],high=precolorx[2])+
+                coord_polar(theta = "x")+
+                ylim(min(enrichdatax1$GeneRatio)/2, max(enrichdatax1$GeneRatio)*1.2)+
+                theme_minimal()+
+                theme(
+                  legend.position = "right",
+                  axis.text = element_blank(),
+                  axis.title = element_blank()
+                ) +
+                geom_text(data=label_data, aes(x=id, y=rev(GeneRatio)+min(enrichdatax1$GeneRatio)/10, label=rev(stringr::str_wrap(Term, 25)), hjust=hjust), color="black",
+                          alpha=0.8, size=3, angle= label_data$angle+8*20/nrow(enrichdatax1), inherit.aes = FALSE)
+            }else{
+              dotplottermx<-ggplot(enrichdatax1, aes(x = reorder(stringr::str_wrap(Term, 25),Count), y = Count,size=Count))+
+                geom_point(aes(color=p.adjust))+ #coord_flip()+
+                scale_size(range = c(2,10))+#round(max(enrichdatax1$Count)*0.8)
+                scale_color_gradient(low=precolorx[1],high=precolorx[2])+
+                coord_polar(theta = "x")+
+                ylim(min(enrichdatax1$Count)/2, max(enrichdatax1$Count)*1.2)+
+                theme_minimal()+
+                theme(
+                  legend.position = "right",
+                  axis.text = element_blank(),
+                  axis.title = element_blank()
+                ) +
+                geom_text(data=label_data, aes(x=id, y=rev(Count)+0.5, label=rev(stringr::str_wrap(Term, 25)), hjust=hjust), color="black",
+                          alpha=0.8, size=3, angle= label_data$angle+8*20/nrow(enrichdatax1), inherit.aes = FALSE)
+            }
           }
         }else{
           if(input$showidif){
-            dotplottermx<-ggplot(enrichdatax1, aes(x = reorder(ID,Count), y = Count,size=Count))+
-              geom_point(aes(color=p.adjust))+ scale_size(range = c(2,10))+
-              labs(x="IDs")+
-              coord_flip()+
-              scale_color_gradient(low=precolorx[1],high=precolorx[2])+
-              theme_bw()
+            if(input$generatioif){
+              dotplottermx<-ggplot(enrichdatax1, aes(x = reorder(ID,GeneRatio), y = GeneRatio,size=Count))+
+                geom_point(aes(color=p.adjust))+ scale_size(range = c(2,10))+
+                labs(x="IDs")+
+                coord_flip()+
+                scale_color_gradient(low=precolorx[1],high=precolorx[2])+
+                theme_bw()
+            }else{
+              dotplottermx<-ggplot(enrichdatax1, aes(x = reorder(ID,Count), y = Count,size=Count))+
+                geom_point(aes(color=p.adjust))+ scale_size(range = c(2,10))+
+                labs(x="IDs")+
+                coord_flip()+
+                scale_color_gradient(low=precolorx[1],high=precolorx[2])+
+                theme_bw()
+            }
           }else{
-            dotplottermx<-ggplot(enrichdatax1, aes(x = reorder(Term,Count), y = Count,size=Count))+
-              geom_point(aes(color=p.adjust))+ scale_size(range = c(2,10))+
-              labs(x="Terms")+
-              coord_flip()+
-              scale_color_gradient(low=precolorx[1],high=precolorx[2])+
-              theme_bw()
+            if(input$generatioif){
+              dotplottermx<-ggplot(enrichdatax1, aes(x = reorder(stringr::str_wrap(Term, 25),GeneRatio), y = GeneRatio,size=Count))+
+                geom_point(aes(color=p.adjust))+ scale_size(range = c(2,10))+
+                labs(x="Terms")+
+                coord_flip()+
+                scale_color_gradient(low=precolorx[1],high=precolorx[2])+
+                theme_bw()
+            }else{
+              dotplottermx<-ggplot(enrichdatax1, aes(x = reorder(stringr::str_wrap(Term, 25),Count), y = Count,size=Count))+
+                geom_point(aes(color=p.adjust))+ scale_size(range = c(2,10))+
+                labs(x="Terms")+
+                coord_flip()+
+                scale_color_gradient(low=precolorx[1],high=precolorx[2])+
+                theme_bw()
+            }
           }
         }
         dotplottermx
@@ -919,6 +983,9 @@ server<-shinyServer(function(input, output, session){
         }
         
         enrichdatax<-enrichdataout()
+        if(input$generatioif){
+          enrichdatax$GeneRatio<-enrichdatax$Count/input$generationum
+        }
         enrichdatax1<-enrichdatax[preindex1,]
         
         if(input$classicmultisiteif){
@@ -926,54 +993,106 @@ server<-shinyServer(function(input, output, session){
           label_data$id=seq(1,nrow(label_data))
           number_of_bar=nrow(label_data)
           angle= 90 - 360 * (label_data$id) /number_of_bar
-          label_data$hjust<-ifelse( angle < -90, 1, 0)
+          label_data$hjust<-ifelse(angle < -90, 1, 0)
           label_data$angle<-ifelse(angle < -90, angle+180, angle)
           if(input$showidif){
-            dotplottermx<-ggplot(enrichdatax1, aes(x = reorder(ID,Count), y = Count,size=Count))+
-              geom_point(aes(color=p.adjust))+ #coord_flip()+
-              scale_size(range = c(2,10))+
-              scale_color_gradient(low=precolorx[1],high=precolorx[2])+
-              coord_polar(theta = "x")+
-              ylim(min(enrichdatax1$Count)/2, max(enrichdatax1$Count)*1.2)+
-              theme_minimal()+
-              theme(
-                legend.position = "right",
-                axis.text = element_blank(),
-                axis.title = element_blank()
-              ) +
-              geom_text(data=label_data, aes(x=id, y=rev(Count)+0.5, label=rev(ID), hjust=hjust), color="black",
-                        alpha=0.8, size=3, angle= label_data$angle+8*20/nrow(enrichdatax1), inherit.aes = FALSE)
+            if(input$generatioif){
+              dotplottermx<-ggplot(enrichdatax1, aes(x = reorder(ID,GeneRatio), y = GeneRatio,size=Count))+
+                geom_point(aes(color=p.adjust))+ #coord_flip()+
+                scale_size(range = c(2,10))+
+                scale_color_gradient(low=precolorx[1],high=precolorx[2])+
+                coord_polar(theta = "x")+
+                ylim(min(enrichdatax1$GeneRatio)/2, max(enrichdatax1$GeneRatio)*1.2)+
+                theme_minimal()+
+                theme(
+                  legend.position = "right",
+                  axis.text = element_blank(),
+                  axis.title = element_blank()
+                ) +
+                geom_text(data=label_data, aes(x=id, y=rev(GeneRatio)+min(enrichdatax1$GeneRatio)/10, label=rev(ID), hjust=hjust), color="black",
+                          alpha=0.8, size=3, angle= label_data$angle+8*20/nrow(enrichdatax1), inherit.aes = FALSE)
+            }else{
+              dotplottermx<-ggplot(enrichdatax1, aes(x = reorder(ID,Count), y = Count,size=Count))+
+                geom_point(aes(color=p.adjust))+ #coord_flip()+
+                scale_size(range = c(2,10))+
+                scale_color_gradient(low=precolorx[1],high=precolorx[2])+
+                coord_polar(theta = "x")+
+                ylim(min(enrichdatax1$Count)/2, max(enrichdatax1$Count)*1.2)+
+                theme_minimal()+
+                theme(
+                  legend.position = "right",
+                  axis.text = element_blank(),
+                  axis.title = element_blank()
+                ) +
+                geom_text(data=label_data, aes(x=id, y=rev(Count)+0.5, label=rev(ID), hjust=hjust), color="black",
+                          alpha=0.8, size=3, angle= label_data$angle+8*20/nrow(enrichdatax1), inherit.aes = FALSE)
+            }
           }else{
-            dotplottermx<-ggplot(enrichdatax1, aes(x = reorder(Term,Count), y = Count,size=Count))+
-              geom_point(aes(color=p.adjust))+ #coord_flip()+
-              scale_size(range = c(2,10))+#round(max(enrichdatax1$Count)*0.8)
-              scale_color_gradient(low=precolorx[1],high=precolorx[2])+
-              coord_polar(theta = "x")+
-              ylim(min(enrichdatax1$Count)/2, max(enrichdatax1$Count)*1.2)+
-              theme_minimal()+
-              theme(
-                legend.position = "right",
-                axis.text = element_blank(),
-                axis.title = element_blank()
-              ) +
-              geom_text(data=label_data, aes(x=id, y=rev(Count)+0.5, label=rev(Term), hjust=hjust), color="black",
-                        alpha=0.8, size=3, angle= label_data$angle+8*20/nrow(enrichdatax1), inherit.aes = FALSE)
+            if(input$generatioif){
+              dotplottermx<-ggplot(enrichdatax1, aes(x = reorder(stringr::str_wrap(Term, 25),GeneRatio), y = GeneRatio,size=Count))+
+                geom_point(aes(color=p.adjust))+ #coord_flip()+
+                scale_size(range = c(2,10))+#round(max(enrichdatax1$Count)*0.8)
+                scale_color_gradient(low=precolorx[1],high=precolorx[2])+
+                coord_polar(theta = "x")+
+                ylim(min(enrichdatax1$GeneRatio)/2, max(enrichdatax1$GeneRatio)*1.2)+
+                theme_minimal()+
+                theme(
+                  legend.position = "right",
+                  axis.text = element_blank(),
+                  axis.title = element_blank()
+                ) +
+                geom_text(data=label_data, aes(x=id, y=rev(GeneRatio)+min(enrichdatax1$GeneRatio)/10, label=rev(stringr::str_wrap(Term, 25)), hjust=hjust), color="black",
+                          alpha=0.8, size=3, angle= label_data$angle+8*20/nrow(enrichdatax1), inherit.aes = FALSE)
+            }else{
+              dotplottermx<-ggplot(enrichdatax1, aes(x = reorder(stringr::str_wrap(Term, 25),Count), y = Count,size=Count))+
+                geom_point(aes(color=p.adjust))+ #coord_flip()+
+                scale_size(range = c(2,10))+#round(max(enrichdatax1$Count)*0.8)
+                scale_color_gradient(low=precolorx[1],high=precolorx[2])+
+                coord_polar(theta = "x")+
+                ylim(min(enrichdatax1$Count)/2, max(enrichdatax1$Count)*1.2)+
+                theme_minimal()+
+                theme(
+                  legend.position = "right",
+                  axis.text = element_blank(),
+                  axis.title = element_blank()
+                ) +
+                geom_text(data=label_data, aes(x=id, y=rev(Count)+0.5, label=rev(stringr::str_wrap(Term, 25)), hjust=hjust), color="black",
+                          alpha=0.8, size=3, angle= label_data$angle+8*20/nrow(enrichdatax1), inherit.aes = FALSE)
+            }
           }
         }else{
           if(input$showidif){
-            dotplottermx<-ggplot(enrichdatax1, aes(x = reorder(ID,Count), y = Count,size=Count))+
-              geom_point(aes(color=p.adjust))+ scale_size(range = c(2,10))+
-              labs(x="IDs")+
-              coord_flip()+
-              scale_color_gradient(low=precolorx[1],high=precolorx[2])+
-              theme_bw()
+            if(input$generatioif){
+              dotplottermx<-ggplot(enrichdatax1, aes(x = reorder(ID,GeneRatio), y = GeneRatio,size=Count))+
+                geom_point(aes(color=p.adjust))+ scale_size(range = c(2,10))+
+                labs(x="IDs")+
+                coord_flip()+
+                scale_color_gradient(low=precolorx[1],high=precolorx[2])+
+                theme_bw()
+            }else{
+              dotplottermx<-ggplot(enrichdatax1, aes(x = reorder(ID,Count), y = Count,size=Count))+
+                geom_point(aes(color=p.adjust))+ scale_size(range = c(2,10))+
+                labs(x="IDs")+
+                coord_flip()+
+                scale_color_gradient(low=precolorx[1],high=precolorx[2])+
+                theme_bw()
+            }
           }else{
-            dotplottermx<-ggplot(enrichdatax1, aes(x = reorder(Term,Count), y = Count,size=Count))+
-              geom_point(aes(color=p.adjust))+ scale_size(range = c(2,10))+
-              labs(x="Terms")+
-              coord_flip()+
-              scale_color_gradient(low=precolorx[1],high=precolorx[2])+
-              theme_bw()
+            if(input$generatioif){
+              dotplottermx<-ggplot(enrichdatax1, aes(x = reorder(stringr::str_wrap(Term, 25),GeneRatio), y = GeneRatio,size=Count))+
+                geom_point(aes(color=p.adjust))+ scale_size(range = c(2,10))+
+                labs(x="Terms")+
+                coord_flip()+
+                scale_color_gradient(low=precolorx[1],high=precolorx[2])+
+                theme_bw()
+            }else{
+              dotplottermx<-ggplot(enrichdatax1, aes(x = reorder(stringr::str_wrap(Term, 25),Count), y = Count,size=Count))+
+                geom_point(aes(color=p.adjust))+ scale_size(range = c(2,10))+
+                labs(x="Terms")+
+                coord_flip()+
+                scale_color_gradient(low=precolorx[1],high=precolorx[2])+
+                theme_bw()
+            }
           }
         }
         dotplottermx
@@ -1155,7 +1274,7 @@ server<-shinyServer(function(input, output, session){
         if(input$polarshowidif){
           enrichdatax<-enrichdatax
         }else{
-          enrichdatax$ID<-enrichdatax$Term
+          enrichdatax$ID<-stringr::str_wrap(enrichdatax$Term, 25)
         }
         
         if(input$leibieif){
@@ -1242,7 +1361,7 @@ server<-shinyServer(function(input, output, session){
         if(input$polarshowidif){
           enrichdatax<-enrichdatax
         }else{
-          enrichdatax$ID<-enrichdatax$Term
+          enrichdatax$ID<-stringr::str_wrap(enrichdatax$Term, 25)
         }
         
         if(input$leibieif){
@@ -1597,6 +1716,11 @@ server<-shinyServer(function(input, output, session){
         enrichdatax<-enrichdataout()
         linkpindexx<-as.numeric(strsplit(input$linkpindex,";")[[1]])
         termclassname<-dimnames(table(enrichdatax$Category))[[1]]
+        if(isolate(input$linkpshowidif)){
+          enrichdatax<-enrichdatax
+        }else{
+          enrichdatax$Term<-stringr::str_wrap(enrichdatax$Term, 35)
+        }
         dataread<-NULL
         for(i in 1:length(termclassname)){
           dataread1<-enrichdatax[enrichdatax$Category==termclassname[i],]
@@ -1648,8 +1772,13 @@ server<-shinyServer(function(input, output, session){
         circos.lines(1:nrow(enrichres3)-0.5, nrow(hytestrawdata2)-countratio1,
                      sector.index = "b",type="h",lwd=2,baseline = nrow(hytestrawdata2),
                      col=fujileibiecolx)
-        circos.axis(major.at = seq(1,nrow(enrichres3))-0.5, labels.facing="clockwise",
-                    labels=enrichres3$ID,minor.ticks=0,labels.cex = isolate(input$zitisize))
+        if(isolate(input$linkpshowidif)){
+          circos.axis(major.at = seq(1,nrow(enrichres3))-0.5, labels.facing="clockwise",
+                      labels=enrichres3$ID,minor.ticks=0,labels.cex = isolate(input$zitisize))
+        }else{
+          circos.axis(major.at = seq(1,nrow(enrichres3))-0.5, labels.facing="clockwise",
+                      labels=enrichres3$Term,minor.ticks=0,labels.cex = isolate(input$zitisize))
+        }
         circos.axis(h = "bottom",direction="inside", labels=FALSE)
         circos.yaxis(side ="right",at=seq(0,nrow(hytestrawdata2),by=2),
                      labels =paste0(seq(max(enrichres3$Count),0,by=-2*round(max(enrichres3$Count)/nrow(hytestrawdata2)))),
@@ -1712,6 +1841,11 @@ server<-shinyServer(function(input, output, session){
         enrichdatax<-enrichdataout()
         linkpindexx<-as.numeric(strsplit(input$linkpindex,";")[[1]])
         termclassname<-dimnames(table(enrichdatax$Category))[[1]]
+        if(isolate(input$linkpshowidif)){
+          enrichdatax<-enrichdatax
+        }else{
+          enrichdatax$Term<-stringr::str_wrap(enrichdatax$Term, 35)
+        }
         dataread<-NULL
         for(i in 1:length(termclassname)){
           dataread1<-enrichdatax[enrichdatax$Category==termclassname[i],]
@@ -1719,8 +1853,6 @@ server<-shinyServer(function(input, output, session){
           dataread<-rbind(dataread,dataread2)
         }
         expressdatax<-expressdataout()
-        #expressdatax1<-expressdatax[,-ncol(expressdatax)]
-        #objectnames<-unique(unlist(lapply(dataread$Objects,function(x)strsplit(x,"/")[[1]])))
         expressdatax1<-expressdatax[1:input$objectnum,]
         expressdatax2x<-expressdatax1[,-ncol(expressdatax1)]
         expressdatax2dist<-dist(expressdatax2x, method="euclidean")
@@ -1765,8 +1897,13 @@ server<-shinyServer(function(input, output, session){
         circos.lines(1:nrow(enrichres3)-0.5, nrow(hytestrawdata2)-countratio1,
                      sector.index = "b",type="h",lwd=2,baseline = nrow(hytestrawdata2),
                      col=fujileibiecolx)
-        circos.axis(major.at = seq(1,nrow(enrichres3))-0.5, labels.facing="clockwise",
-                    labels=enrichres3$ID,minor.ticks=0,labels.cex = isolate(input$zitisize))
+        if(isolate(input$linkpshowidif)){
+          circos.axis(major.at = seq(1,nrow(enrichres3))-0.5, labels.facing="clockwise",
+                      labels=enrichres3$ID,minor.ticks=0,labels.cex = isolate(input$zitisize))
+        }else{
+          circos.axis(major.at = seq(1,nrow(enrichres3))-0.5, labels.facing="clockwise",
+                      labels=enrichres3$Term,minor.ticks=0,labels.cex = isolate(input$zitisize))
+        }
         circos.axis(h = "bottom",direction="inside", labels=FALSE)
         circos.yaxis(side ="right",at=seq(0,nrow(hytestrawdata2),by=2),
                      labels =paste0(seq(max(enrichres3$Count),0,by=-2*round(max(enrichres3$Count)/nrow(hytestrawdata2)))),
