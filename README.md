@@ -5,6 +5,8 @@
 ## 1. Brief Description
 **<font size='5'> EnrichVisBox </font>** is a free, user-friendly and powerful software for visualization of the functional enrichment analysis results, including bubble plot, UpSet plot, polar bar plot, rectangle plot, ridgeline plot, network plot, and variant chord plot. It is developed with [R](https://www.r-project.org/) and an example is shown here: [https://www.omicsolution.com/wukong/EnrichVisBox/](https://www.omicsolution.com/wukong/EnrichVisBox/).
 
+**Please cite:** Shisheng Wang , Yi Zhong, Jingqiu Cheng, Hao Yang, EnrichVisBox: A Versatile and Powerful Web Toolbox for Visualizing Complex Functional Enrichment Results of Omics Data, Journal of computational biology, [doi: 10.1089/cmb.2020.0564](https://doi.org/10.1089/cmb.2020.0564).
+
 ## 2. Detailed Introduction
 The usage about this tool can be found here:
 [https://github.com/wangshisheng/EnrichVisBox/blob/master/Supplementary_Notes.pdf](https://github.com/wangshisheng/EnrichVisBox/blob/master/Supplementary_Notes.pdf).
